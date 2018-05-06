@@ -1,0 +1,140 @@
+---
+title: "Machine Learning"
+author: "Ganesh Prabhupatkar"
+date: "May 5, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Practical Machine Learning Course
+
+## Introduction
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement ??? a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset). 
+
+## Data Source
+The training data for this project are available here: 
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+The data for this project come from this source: http://groupware.les.inf.puc-rio.br/har. If you use the document you create for this class for any purpose please cite them as they have been very generous in allowing their data to be used for this kind of assignment. 
+
+## Expected Results
+The goal of your project is to predict the manner in which they did the exercise. This is the ???classe??? variable in the training set. You may use any of the other variables to predict with. You should create a report describing how you built your model, how you used cross validation, what you think the expected out of sample error is, and why you made the choices you did. You will also use your prediction model to predict 20 different test cases.
+
+
+```{r Initial Loading}
+## Loading required package
+library(caret)
+library(corrplot)
+library(rpart)
+library(rpart.plot)
+
+set.seed(12345)
+```
+
+## Read Data from file
+
+Read the data files from specified locations.
+
+```{r accessdata}
+## Training Data access
+DataTrain <- read.csv(url("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"),header=TRUE, na.strings=c("NA","#DIV/0!",""))
+
+## Test Data access
+DataTest <- read.csv(url("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"),header=TRUE,na.strings=c("NA","#DIV/0!",""))
+
+dim(DataTrain)
+dim(DataTest)
+```
+
+## Clean the data
+The "classe" variable in the training set is the outcome to predict.
+we will clean the data and get rid of observations with missing values as well as some meaningless variables.
+
+```{r cleandata}
+## clean the data, remove NA columns
+DataTrain <- DataTrain[, colSums(is.na(DataTrain)) == 0]
+DataTest <- DataTest[, colSums(is.na(DataTest)) == 0] 
+
+## Remove columns that does not contribute the results
+Fieldclasse <- DataTrain$classe
+RemoveTrain <- grepl("^X|timestamp|window", names(DataTrain))
+DataTrain <- DataTrain[, !RemoveTrain]
+CleanTraing <- DataTrain[, sapply(DataTrain, is.numeric)]
+CleanTraing$classe <- Fieldclasse
+
+RemoveTest <- grepl("^X|timestamp|window", names(DataTest))
+DataTest <- DataTest[, !RemoveTest]
+CleanTest <- DataTest[, sapply(DataTest, is.numeric)]
+
+dim(CleanTraing)
+dim(CleanTest)
+```
+
+##Distribute the training data
+we can split the cleaned training data into a pure training data set (70%) and a testing data set (30%). We will use the test data set to conduct cross validation in future steps.
+
+```{r Splitdata}
+
+##Distribute the training data
+DistTrain <- createDataPartition(y=CleanTraing$classe, p=0.7, list=FALSE)
+TrainDataSet <- CleanTraing[DistTrain, ]
+TestDataSet <- CleanTraing[-DistTrain, ]
+dim(TrainDataSet)
+dim(TestDataSet)
+```
+
+
+##Data modeling
+We fit a predictive model for activity recognition using Random Forest algorithm.
+
+```{r PredictModel}
+TrainControl <- trainControl(method="cv", 5)
+ModFit <- train(classe ~ ., data=TrainDataSet, method="rf", trControl=TrainControl, ntree=250, prox=TRUE)
+ModFit
+##getTree(ModFit$finalModel,k=2)
+```
+
+We will estimate the performance of the model
+
+```{r Performance}
+predictFit <- predict(ModFit, TestDataSet)
+confusionMatrix(TestDataSet$classe, predictFit)
+
+ModelAccuracy <- postResample(predictFit, TestDataSet$classe)
+ModelAccuracy
+perf <- 1 - as.numeric(confusionMatrix(TestDataSet$classe, predictFit)$overall[1])
+perf
+```
+
+So, the estimated accuracy of the model is 98.9% 
+
+## Predicting for Test Data set
+Now, we will apply the model to the original testing data set downloaded from the data source.  
+
+```{r predict_test}
+FinalPredict <- predict(ModFit, CleanTest[, -length(names(CleanTest))])
+FinalPredict
+```
+
+## Appendix
+#Correlation Matrix 
+```{r Appendix C}
+corrPlot <- cor(TrainDataSet[, -length(names(TrainDataSet))])
+corrplot(corrPlot, method="color")
+
+```
+#Decision Tree
+```{r Appendix D}
+treeModel <- rpart(classe ~ ., data=TrainDataSet, method="class")
+prp(treeModel) # fast plot
+
+
+```
